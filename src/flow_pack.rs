@@ -115,11 +115,21 @@ pub fn pack(
 
     for path_on_host in file_paths_vec {
         let path_within_pak = path_on_host.strip_prefix(input_folder)?;
+
+        // Need to build this string manually in case we're running on
+        // a platform that doesn't use "/" separators (e.g. Windows)
+        let capacity = path_within_pak.as_os_str().as_encoded_bytes().len() + 1;
+        let mut asset_name_bytes = Vec::with_capacity(capacity);
+        for component in path_within_pak.iter() {
+            asset_name_bytes.extend_from_slice(component.as_encoded_bytes());
+            asset_name_bytes.push(b'/');
+        }
+        asset_name_bytes.pop();
+
         if verbosity == Verbosity::Verbose {
-            println!("{}", path_within_pak.display());
+            println!("{}", String::from_utf8_lossy(&asset_name_bytes));
         }
 
-        let asset_name_bytes = path_within_pak.as_os_str().as_encoded_bytes();
         let mut asset_data = std::fs::read(&path_on_host)?;
 
         let decompressed_size = asset_data.len();
@@ -134,7 +144,7 @@ pub fn pack(
         let compressed_size = asset_data.len();
 
         let plaintext_crc32 = crc32fast::hash(&asset_data);
-        encrypt(asset_name_bytes, key, &mut asset_data);
+        encrypt(&asset_name_bytes, key, &mut asset_data);
         writer.write_all(&asset_data)?;
         let ciphertext_crc32 = crc32fast::hash(&asset_data);
 
