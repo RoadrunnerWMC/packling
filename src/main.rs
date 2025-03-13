@@ -69,11 +69,11 @@ struct Cli {
     force: bool,
 
     /// Compress the .pak header (WARNING: may nearly double the encoding time)
-    #[arg(short, long)]
+    #[arg(long)]
     compress_header: bool,
 
     /// Compress files in the .pak
-    #[arg(short, long)]
+    #[arg(long)]
     compress_files: bool,
 
     /// Optional text file listing file paths in the .pak, in the order they should be encoded.
