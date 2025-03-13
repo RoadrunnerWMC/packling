@@ -1,0 +1,110 @@
+//------------------------------------------------
+//--- 010 Editor v15.0.1 Binary Template
+//
+//      File: lingcod_pak.bt
+//   Authors: RoadrunnerWMC
+//   Version: 0.1
+//   Purpose: Parse Lingcod emulator PAK files.
+//  Category: Archive
+// File Mask: *.pak
+//  ID Bytes: 4B 43 41 50 67 00 00 00
+//   History:
+//------------------------------------------------
+
+
+const uint32 HEADER_DJB2A = 0x5e40989a;  // djb2a("header")
+
+
+string format_hex(uint64 value) {
+    string s;
+    SPrintf(s, "0x%x", value);
+    return s;
+}
+
+
+LittleEndian();
+
+
+uint64 first_8 <hidden=true>;
+if (first_8 != 0x675041434b) {  // "PACK", version 103
+    Warning("Not a Lingcod .pak file.");
+    return;
+}
+
+
+// Heuristic to detect encryption
+FSeek(0x28);
+uint32 file_count <hidden=true>;
+local int is_encrypted = (file_count > 0xfffff);
+
+if (is_encrypted) {
+    Warning("This Lingcod .pak file appears to be encrypted.");
+}
+
+
+// Have to build this string here due to scoping issues...
+// TODO: should this use the decompressed (0x14) or compressed (0x18) size?
+FSeek(0x14);
+uint32 files_list_header_size_compressed <hidden=true>;
+local string field_1c_comment = Str(
+    "Expected: 0x%x ^ 0x%x = 0x%x",
+    files_list_header_size_compressed,
+    HEADER_DJB2A,
+    files_list_header_size_compressed ^ HEADER_DJB2A
+);
+
+
+typedef struct {
+    /* 0x00 */ char magic[4] <name="Magic", comment="Always \"KCAP\"">;
+    /* 0x04 */ uint32 version <name="Version", comment="Always 103">;
+    /* 0x08 */ uint32 crc32 <name="CRC32", read=format_hex, comment="jamcrc32(file[0x14:], initial=(length of file))">;
+    /* 0x0c */ uint8 field_0c <name="Field 0x0C", read=format_hex, comment="Always 0x1">;
+    /* 0x0d */ time_t timestamp <name="Timestamp", open=false>;
+    /* 0x11 */ char pad[3] <hidden=true>;
+    /* 0x14 */ uint32 files_list_header_size_decompressed <name="Files-List Header Decompressed Size", read=format_hex>;
+    /* 0x18 */ uint32 files_list_header_size_compressed <name="Files-List Header Compressed Size", read=format_hex>;
+    /* 0x1c */ uint32 field_1c <name="Files-List Header Size ^ djb2a(\"header\")", read=format_hex, comment=(field_1c_comment)>;
+    /* 0x20 */ uint32 plaintext_crc32 <name="CRC32 of Files-List Header Plaintext", read=format_hex>;
+    /* 0x24 */ uint32 ciphertext_crc32 <name="CRC32 of Files-List Header Ciphertext", read=format_hex>;
+} Header;
+
+
+typedef struct {
+    /* 0x00 */ uint32 name_size <name="Name Size">;
+    /* 0x04 */ char name[name_size] <name="Name">;
+
+    // (Offsets measured from the end of `name`)
+    /* 0x00 */ uint32 size_decompressed <name="Decompressed Size", read=format_hex>;
+    /* 0x04 */ uint32 size_compressed <name="Compressed Size", read=format_hex>;
+    /* 0x08 */ uint32 offset <name="Offset", read=format_hex, comment=Str("Relative to the end of the files-list header (0x%x)", file_data_start_offset)>;
+    /* 0x0c */ uint32 field_0c <name="Field 0x0C", read=format_hex, comment="Set to 2 if the file size is at least 0xa00000 or if it's an ALF file, and to 0 otherwise">;
+    /* 0x10 */ uint32 field_10 <name="Field 0x10", read=format_hex, comment="Set to 0 if the file is empty, or to djb2a(filename) XOR file size otherwise">;
+    /* 0x14 */ uint32 plaintext_crc32 <name="CRC32 of Plaintext", read=format_hex>;
+    /* 0x18 */ uint32 ciphertext_crc32 <name="CRC32 of Ciphertext", read=format_hex>;
+
+    local long p = FTell();
+    FSeek(file_data_start_offset + offset);
+    byte data[size_compressed] <name="Data", open=suppress>;
+    FSeek(p);
+} File <read=(name)>;
+
+
+typedef struct {
+    /* 0x00 */ uint32 count <name="Count">;
+
+    local int i;
+    for (i = 0; i < count; i++)
+        File files;
+} FilesList <read=Str("%d files", count)>;
+
+
+FSeek(0);
+/* 0x00 */ Header header <name="Header">;
+
+if (is_encrypted) {
+    /* 0x28 */ byte files_list_header[header.files_list_header_size_compressed] <name="Files List (Encrypted)", open=suppress>;
+    /* ???? */ byte files_data[FileSize() - FTell()] <name="Files (Encrypted)", open=suppress>;
+} else {
+    local uint32 file_data_start_offset = sizeof(header) + header.files_list_header_size_compressed;
+    /* 0x28 */ FilesList files_list <name="Files">;
+}
