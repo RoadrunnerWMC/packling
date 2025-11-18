@@ -16,9 +16,7 @@ const uint32 HEADER_DJB2A = 0x5e40989a;  // djb2a("header")
 
 
 string format_hex(uint64 value) {
-    string s;
-    SPrintf(s, "0x%x", value);
-    return s;
+    return Str("0x%x", value);
 }
 
 
