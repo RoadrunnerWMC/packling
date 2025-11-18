@@ -36,10 +36,9 @@ pub fn get_key(file: &Path) -> anyhow::Result<OwnedKey> {
     let mut possible_key: [u8; KEY_SIZE] = [0; KEY_SIZE];
     for offset in KEY_OFFSETS {
         reader.seek(SeekFrom::Start(offset))?;
-        if reader.read(&mut possible_key)? == KEY_SIZE {
-            if crc32fast::hash(&possible_key) == KEY_CRC32 {
-                return Ok(Box::new(possible_key));
-            }
+        if reader.read(&mut possible_key)? == KEY_SIZE
+                && crc32fast::hash(&possible_key) == KEY_CRC32 {
+            return Ok(Box::new(possible_key));
         }
     }
 

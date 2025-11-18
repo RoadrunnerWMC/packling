@@ -91,10 +91,8 @@ pub fn pack(
         .create(force)
         .create_new(!force)
         .open(output_file);
-    if let Err(ref e) = f {
-        if e.kind() == ErrorKind::AlreadyExists {
-            bail!("output file exists (use -f to force)");
-        }
+    if let Err(ref e) = f && e.kind() == ErrorKind::AlreadyExists {
+        bail!("output file exists (use -f to force)");
     }
 
     let mut writer = BufWriter::new(f?);
@@ -114,7 +112,7 @@ pub fn pack(
         // a platform that doesn't use "/" separators (e.g. Windows)
         let capacity = path_within_pak.as_os_str().as_encoded_bytes().len() + 1;
         let mut asset_name_bytes = Vec::with_capacity(capacity);
-        for component in path_within_pak.iter() {
+        for component in path_within_pak {
             asset_name_bytes.extend_from_slice(component.as_encoded_bytes());
             asset_name_bytes.push(b'/');
         }
@@ -143,7 +141,7 @@ pub fn pack(
         let ciphertext_crc32 = crc32fast::hash(&asset_data);
 
         assets_list.push(PakAsset {
-            name: asset_name_bytes.to_vec(),
+            name: asset_name_bytes.clone(),
             size_decompressed: u32::try_from(decompressed_size)?,
             size_compressed: u32::try_from(compressed_size)?,
             offset: u32::try_from(assets_data_offset)?,

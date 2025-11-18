@@ -112,7 +112,7 @@ fn pick_default_output_folder(input_file: &Path) -> PathBuf {
     };
     if ext.is_empty() {
         return add_out_suffix_to_filename(input_file);
-    };
+    }
     input_file.with_extension("")
 }
 
