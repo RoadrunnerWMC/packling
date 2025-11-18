@@ -8,7 +8,6 @@ anyhow = "1.0"
 binrw = "0.15"
 clap = { version = "4.5", features = ["derive"] }
 crc32fast = "1.5"
-djb2 = { version = "0.1", path = "../djb2" }
 lz4_flex = { version = "0.12", default-features = false, features = ["std"] }
 same-file = "1.0.6"
 time = { version = "0.3", features = ["formatting", "parsing"] }

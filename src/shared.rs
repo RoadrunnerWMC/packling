@@ -28,6 +28,11 @@ pub const PAK_ASSET_CIPHERTEXT_CRC32_OFFSET_RELATIVE_TO_END: usize = 0x4;
 /// The name (for key-generation purposes) of the assets list blob.
 pub const ASSETS_LIST_NAME: &[u8; 6] = b"header";
 
+/// The initial seed used for djb2 hashes.
+const DJB2_HASH_SEED: u32 = 0x1505;
+/// The multiplier used in djb2 hashing.
+const DJB2_MULTIPLIER: u32 = 33;
+
 /// Time format used for displaying dates to the user and reading them
 /// from the CLI. Similar to ISO 8601, but without any timezone info.
 pub const TIME_FORMAT: &str = "[year]-[month]-[day]T[hour]:[minute]:[second]";
@@ -80,7 +85,7 @@ pub struct PakHeader {
 
     /*      */ // Same as the last 12 bytes of `PakAsset`
     /*      */ // TODO: which size to use?
-    /*      */ #[bw(calc = djb2::Djb2a::hash_bytes_const(ASSETS_LIST_NAME).as_u32() ^ assets_list_size_compressed)]
+    /*      */ #[bw(calc = djb2a_hash(ASSETS_LIST_NAME) ^ assets_list_size_compressed)]
     /* 0x1c */ _field_1c: u32,
     /* 0x20 */ pub plaintext_crc32: u32,
     /* 0x24 */ pub ciphertext_crc32: u32,
@@ -115,7 +120,7 @@ fn calc_field_0x10(name: &[u8], size_compressed: u32) -> u32 {
     if size_compressed == 0 {
         0
     } else {
-        djb2::Djb2a::hash_bytes(name).as_u32() ^ size_compressed
+        djb2a_hash(name) ^ size_compressed
     }
 }
 
@@ -187,4 +192,16 @@ pub fn fix_header_crc32(file: File, total_file_size: u64) -> anyhow::Result<()> 
 
     writer.flush()?;
     Ok(())
+}
+
+
+/// Calculate the djb2a hash of some data.
+pub fn djb2a_hash(data: &[u8]) -> u32 {
+    let mut hash = DJB2_HASH_SEED;
+
+    for c in data {
+        hash = hash.wrapping_mul(DJB2_MULTIPLIER) ^ u32::from(*c);
+    }
+
+    hash
 }

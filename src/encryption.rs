@@ -1,6 +1,9 @@
 use std::io::{Read, Seek, SeekFrom};
 
-use crate::key::KeyRef;
+use crate::{
+    key::KeyRef,
+    shared::djb2a_hash,
+};
 
 
 /// Size in bytes of encryption/decryption chunks. Each chunk uses a
@@ -17,7 +20,7 @@ const XXTEA_CHUNK_SIZE: usize = 0x2000;
 fn generate_key(name: &[u8], length: u32, chunk_offset: u32, fixed_key: KeyRef) -> Box<[u8]> {
     let mut key = Box::new(*fixed_key);
 
-    let mask = length ^ chunk_offset ^ djb2::Djb2a::hash_bytes(name).as_u32();
+    let mask = length ^ chunk_offset ^ djb2a_hash(name);
 
     #[allow(clippy::cast_possible_truncation)]
     for i in 0..4 {
