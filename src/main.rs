@@ -14,6 +14,7 @@ use crate::{
 
 mod encryption;
 mod flow_just_decrypt;
+mod flow_just_encrypt;
 mod flow_pack;
 mod flow_unpack;
 mod jamcrc32;
@@ -237,7 +238,13 @@ fn handle_repack_file_to_file(cli: Cli, key: KeyRef, verbosity: Verbosity) -> an
     }
 
     if output_encryption {
-        todo!()
+        crate::flow_just_encrypt::encrypt(
+            &cli.input,
+            &output,
+            key,
+            cli.force,
+            verbosity,
+        )?;
     } else {
         crate::flow_just_decrypt::decrypt(
             &cli.input,

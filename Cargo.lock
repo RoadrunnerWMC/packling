@@ -245,6 +245,7 @@ dependencies = [
  "crc32fast",
  "djb2",
  "lz4_flex",
+ "same-file",
  "time",
  "walkdir",
  "xxtea-nostd",

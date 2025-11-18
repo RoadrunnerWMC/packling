@@ -33,7 +33,7 @@ pub fn decrypt(
 ) -> anyhow::Result<()> {
 
     // If we're not decrypting in-place...
-    if input_file.canonicalize()? != output_file.canonicalize()? {
+    if !same_file::is_same_file(input_file, output_file).unwrap_or(false) {
         // ...make a copy of the input file at the output file path
         if !force && output_file.is_file() {
             bail!("output file exists (use -f to force)");

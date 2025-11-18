@@ -1,33 +1,27 @@
 use std::{
     collections::HashSet,
     fs::File,
-    io::{BufReader, BufRead, BufWriter, Read, Write, Cursor, Seek, SeekFrom, ErrorKind},
+    io::{BufReader, BufRead, BufWriter, Write, Cursor, Seek, SeekFrom, ErrorKind},
     path::Path,
 };
 
 use anyhow::bail;
-use binrw::{BinWrite, BinWriterExt};
+use binrw::{BinWrite};
 
 use crate::{
     encryption::encrypt,
-    jamcrc32::Jamcrc32Hasher,
     key::KeyRef,
     shared::{
         ASSETS_LIST_NAME,
         FILE_VERSION,
         PAK_HEADER_SIZE,
-        PAK_CRC32_OFFSET,
-        PAK_CRC32_START_OFFSET,
         Verbosity,
         PakHeader,
         PakAsset,
         PakAssets,
+        fix_header_crc32,
     },
 };
-
-
-// Just using the same value as `BufReader` from the Rust stdlib
-const CRC32_DATA_BUFFER_SIZE: usize = 8 * 1024;
 
 
 /// Create a .pak file with the contents of the specified folder.
@@ -198,36 +192,4 @@ pub fn pack(
 
     // Finally, fix the header CRC32
     fix_header_crc32(writer.into_inner()?, total_file_size)
-}
-
-
-fn fix_header_crc32(file: File, total_file_size: u64) -> anyhow::Result<()> {
-    let mut reader = BufReader::new(file);
-
-    // Calculate the JAMCRC32 of the entire file starting at
-    // PAK_CRC32_START_OFFSET
-
-    reader.seek(SeekFrom::Start(PAK_CRC32_START_OFFSET.try_into()?))?;
-
-    let mut data_buffer = vec![0; CRC32_DATA_BUFFER_SIZE];
-    #[allow(clippy::cast_possible_truncation)]
-    let mut hasher = Jamcrc32Hasher::new_with_initial(total_file_size as u32);
-    loop {
-        let amount_read = reader.read(&mut data_buffer)?;
-        hasher.update(&data_buffer[..amount_read]);
-        if amount_read < CRC32_DATA_BUFFER_SIZE {
-            break;
-        }
-    }
-    let crc = hasher.finalize();
-
-    // Switch back to a BufWriter, and write that value to 0x08
-
-    let mut writer = BufWriter::new(reader.into_inner());
-
-    writer.seek(SeekFrom::Start(PAK_CRC32_OFFSET.try_into()?))?;
-    writer.write_le(&crc)?;
-
-    writer.flush()?;
-    Ok(())
 }

@@ -1,10 +1,12 @@
 use std::{
     fs::File,
-    io::{BufReader, Seek, SeekFrom},
+    io::{BufReader, BufWriter, Read, Write, Seek, SeekFrom},
     path::Path,
 };
 
-use binrw::{binrw, BinReaderExt};
+use binrw::{binrw, BinReaderExt, BinWriterExt};
+
+use crate::jamcrc32::Jamcrc32Hasher;
 
 
 /// The size in bytes of `PakHeader`.
@@ -17,12 +19,22 @@ pub const PAK_CRC32_START_OFFSET: usize = 0x14;
 /// The value of the file header "version" field found in all publicly
 /// available PAK files.
 pub const FILE_VERSION: u32 = 103;
+/// The absolute value of the offset of the plaintext-CRC32 value in
+/// `PakAsset` relative to the end of the struct.
+pub const PAK_ASSET_PLAINTEXT_CRC32_OFFSET_RELATIVE_TO_END: usize = 0x8;
+/// The absolute value of the offset of the ciphertext-CRC32 value in
+/// `PakAsset` relative to the end of the struct.
+pub const PAK_ASSET_CIPHERTEXT_CRC32_OFFSET_RELATIVE_TO_END: usize = 0x4;
 /// The name (for key-generation purposes) of the assets list blob.
 pub const ASSETS_LIST_NAME: &[u8; 6] = b"header";
 
 /// Time format used for displaying dates to the user and reading them
 /// from the CLI. Similar to ISO 8601, but without any timezone info.
 pub const TIME_FORMAT: &str = "[year]-[month]-[day]T[hour]:[minute]:[second]";
+
+
+// Just using the same value as `BufReader` from the Rust stdlib
+const CRC32_DATA_BUFFER_SIZE: usize = 8 * 1024;
 
 
 /// Represents the user-selected verbosity level.
@@ -141,4 +153,38 @@ pub fn check_is_encrypted(path: &Path) -> anyhow::Result<bool> {
     reader.seek(SeekFrom::Start(PAK_HEADER_SIZE.try_into()?))?;
     let num_files: u32 = reader.read_le()?;
     Ok(num_files > 0x000f_ffff)
+}
+
+
+/// Recalculate the CRC32 of the provided encrypted PAK file, and write
+/// it to the correct header field (0x08).
+pub fn fix_header_crc32(file: File, total_file_size: u64) -> anyhow::Result<()> {
+    let mut reader = BufReader::new(file);
+
+    // Calculate the JAMCRC32 of the entire file starting at
+    // PAK_CRC32_START_OFFSET
+
+    reader.seek(SeekFrom::Start(PAK_CRC32_START_OFFSET.try_into()?))?;
+
+    let mut data_buffer = vec![0; CRC32_DATA_BUFFER_SIZE];
+    #[allow(clippy::cast_possible_truncation)]
+    let mut hasher = Jamcrc32Hasher::new_with_initial(total_file_size as u32);
+    loop {
+        let amount_read = reader.read(&mut data_buffer)?;
+        hasher.update(&data_buffer[..amount_read]);
+        if amount_read < CRC32_DATA_BUFFER_SIZE {
+            break;
+        }
+    }
+    let crc = hasher.finalize();
+
+    // Switch back to a BufWriter, and write that value to 0x08
+
+    let mut writer = BufWriter::new(reader.into_inner());
+
+    writer.seek(SeekFrom::Start(PAK_CRC32_OFFSET.try_into()?))?;
+    writer.write_le(&crc)?;
+
+    writer.flush()?;
+    Ok(())
 }
